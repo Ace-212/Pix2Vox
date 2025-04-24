@@ -15,10 +15,10 @@ matplotlib.use('Agg')
 from argparse import ArgumentParser
 from datetime import datetime as dt
 from pprint import pprint
-
 from config import cfg
 from core.train import train_net
 from core.test import test_net
+from tensorboardX import SummaryWriter
 
 
 def get_args_from_command_line():
@@ -74,7 +74,34 @@ def main():
         train_net(cfg)
     else:
         if 'WEIGHTS' in cfg.CONST and os.path.exists(cfg.CONST.WEIGHTS):
-            test_net(cfg)
+            # 1) clean up --out (remove any leading/trailing quotes)
+            raw_out = cfg.DIR.OUT_PATH.strip("'\"")
+            assert '%s' in raw_out, (
+                "Your --out path must include a '%s' placeholder, "
+                "e.g. --out ./output/%s"
+            )
+
+            # 2) build an absolute pattern e.g. C:\…\Pix2Vox\output\%s
+            abs_pattern_out = os.path.abspath(raw_out)
+
+            # 3) create the images folder (and its 'test' subfolder) ahead of time
+            images_dir = abs_pattern_out % 'images'           # …/output/images
+            print(f"[DEBUG] Creating image output directory: {images_dir}")
+            os.makedirs(images_dir, exist_ok=True)
+
+            # 4) start TensorBoard writer into that same folder
+            print(f"[DEBUG] Starting TensorBoard writer at: {images_dir}")
+            writer = SummaryWriter(log_dir=images_dir)
+
+            # 5) run test_net using the absolute‐path pattern
+            best_iou = test_net(
+                cfg,
+                output_dir=abs_pattern_out,   # e.g. …/output/%s
+                test_writer=writer
+            )
+            print(f"[DEBUG] test_net finished, returned max IoU = {best_iou:.4f}")
+
+            writer.close()
         else:
             print('[FATAL] %s Please specify the file path of checkpoint.' % (dt.now()))
             sys.exit(2)

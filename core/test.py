@@ -56,7 +56,7 @@ def test_net(cfg,
         test_data_loader = torch.utils.data.DataLoader(dataset=dataset_loader.get_dataset(
             utils.data_loaders.DatasetType.TEST, cfg.CONST.N_VIEWS_RENDERING, test_transforms),
                                                        batch_size=1,
-                                                       num_workers=1,
+                                                       num_workers=0,
                                                        pin_memory=True,
                                                        shuffle=False)
 
@@ -142,19 +142,55 @@ def test_net(cfg,
             test_iou[taxonomy_id]['n_samples'] += 1
             test_iou[taxonomy_id]['iou'].append(sample_iou)
 
+            if output_dir and sample_idx < 10:
+                img_dir       = output_dir % 'images'
+                recon_dir     = os.path.join(img_dir, 'test_recon')
+                gt_dir        = os.path.join(img_dir, 'test_gt')
+                os.makedirs(recon_dir, exist_ok=True)
+                os.makedirs(gt_dir,    exist_ok=True)
+
+                # 1) Save & log reconstructed volume
+                gv = generated_volume.cpu().numpy()
+                recon_img = utils.binvox_visualization.get_volume_views(
+                    gv,
+                    recon_dir,
+                    sample_idx         # use sample_idx so each file is unique
+                )
+                test_writer.add_image(
+                    f'Test Sample#{sample_idx:02d}/Reconstruction',
+                    recon_img,
+                    sample_idx,
+                    dataformats='HWC'
+                )
+
+                # 2) Save & log ground‐truth volume
+                gtv = ground_truth_volume.cpu().numpy()
+                gt_img = utils.binvox_visualization.get_volume_views(
+                    gtv,
+                    gt_dir,
+                    sample_idx
+                )
+                test_writer.add_image(
+                    f'Test Sample#{sample_idx:02d}/GroundTruth',
+                    gt_img,
+                    sample_idx,
+                    dataformats='HWC'
+                )
             # Append generated volumes to TensorBoard
+            '''
             if output_dir and sample_idx < 3:
                 img_dir = output_dir % 'images'
                 # Volume Visualization
                 gv = generated_volume.cpu().numpy()
                 rendering_views = utils.binvox_visualization.get_volume_views(gv, os.path.join(img_dir, 'test'),
                                                                               epoch_idx)
-                test_writer.add_image('Test Sample#%02d/Volume Reconstructed' % sample_idx, rendering_views, epoch_idx)
+                test_writer.add_image('Test Sample#%02d/Volume Reconstructed' % sample_idx, rendering_views, epoch_idx, dataformats='HWC')
                 gtv = ground_truth_volume.cpu().numpy()
                 rendering_views = utils.binvox_visualization.get_volume_views(gtv, os.path.join(img_dir, 'test'),
                                                                               epoch_idx)
-                test_writer.add_image('Test Sample#%02d/Volume GroundTruth' % sample_idx, rendering_views, epoch_idx)
-
+                test_writer.add_image('Test Sample#%02d/Volume GroundTruth' % sample_idx, rendering_views, epoch_idx, dataformats='HWC')
+            '''
+            
             # Print sample loss and IoU
             print('[INFO] %s Test[%d/%d] Taxonomy = %s Sample = %s EDLoss = %.4f RLoss = %.4f IoU = %s' %
                   (dt.now(), sample_idx + 1, n_samples, taxonomy_id, sample_name, encoder_loss.item(),
