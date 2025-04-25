@@ -39,7 +39,7 @@ def test_net(cfg,
     with open(cfg.DATASETS[cfg.DATASET.TEST_DATASET.upper()].TAXONOMY_FILE_PATH, encoding='utf-8') as file:
         taxonomies = json.loads(file.read())
     taxonomies = {t['taxonomy_id']: t for t in taxonomies}
-
+    
     # Set up data loader
     if test_data_loader is None:
         # Set up data augmentation
@@ -98,7 +98,7 @@ def test_net(cfg,
     decoder.eval()
     refiner.eval()
     merger.eval()
-
+    save_counts = {}   
     for sample_idx, (taxonomy_id, sample_name, rendering_images, ground_truth_volume) in enumerate(test_data_loader):
         taxonomy_id = taxonomy_id[0] if isinstance(taxonomy_id[0], str) else taxonomy_id[0].item()
         sample_name = sample_name[0]
@@ -142,6 +142,37 @@ def test_net(cfg,
             test_iou[taxonomy_id]['n_samples'] += 1
             test_iou[taxonomy_id]['iou'].append(sample_iou)
 
+            if output_dir:
+                # initialise counter for this class
+                if taxonomy_id not in save_counts:
+                    save_counts[taxonomy_id] = 0
+
+                if save_counts[taxonomy_id] < 5:
+                    # where to drop images  →  <out>/images/test_recon/<class>/
+                    base_dir  = output_dir % 'images'
+                    recon_dir = os.path.join(base_dir, 'test_recon', taxonomies[taxonomy_id]['taxonomy_name'])
+                    gt_dir    = os.path.join(base_dir, 'test_gt',    taxonomies[taxonomy_id]['taxonomy_name'])
+                    os.makedirs(recon_dir, exist_ok=True)
+                    os.makedirs(gt_dir,    exist_ok=True)
+
+                    # index within this class (0-9)
+                    cls_idx = save_counts[taxonomy_id]
+
+                    # 1) reconstruction
+                    gv = generated_volume.cpu().numpy()
+                    recon_img = utils.binvox_visualization.get_volume_views(gv, recon_dir, cls_idx)
+                    test_writer.add_image(f'{taxonomy_id}/Recon_{cls_idx:02d}', recon_img,
+                                        sample_idx, dataformats='HWC')
+
+                    # 2) ground truth
+                    gtv = ground_truth_volume.cpu().numpy()
+                    gt_img = utils.binvox_visualization.get_volume_views(gtv, gt_dir, cls_idx)
+                    test_writer.add_image(f'{taxonomy_id}/GT_{cls_idx:02d}', gt_img,
+                                        sample_idx, dataformats='HWC')
+
+                    # bump per-class counter
+                    save_counts[taxonomy_id] += 1
+            '''
             if output_dir and sample_idx < 10:
                 img_dir       = output_dir % 'images'
                 recon_dir     = os.path.join(img_dir, 'test_recon')
@@ -176,6 +207,7 @@ def test_net(cfg,
                     sample_idx,
                     dataformats='HWC'
                 )
+            '''
             # Append generated volumes to TensorBoard
             '''
             if output_dir and sample_idx < 3:
